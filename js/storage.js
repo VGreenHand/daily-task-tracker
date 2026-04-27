@@ -13,19 +13,55 @@ const defaultData = {
 };
 
 /**
+ * 数据迁移 - 确保旧数据兼容新版本
+ */
+function migrateData(data) {
+  if (!data) return data;
+
+  // 为没有 order 字段的任务按当前顺序补充
+  if (data.tasks && Array.isArray(data.tasks)) {
+    data.tasks.forEach((task, index) => {
+      if (task.order === undefined) {
+        task.order = index;
+      }
+    });
+  }
+
+  return data;
+}
+
+/**
  * 从LocalStorage加载数据
  */
 function loadData() {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
     if (data) {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      return migrateData(parsed);
     }
     return JSON.parse(JSON.stringify(defaultData));
   } catch (error) {
     console.error('加载数据失败:', error);
     return JSON.parse(JSON.stringify(defaultData));
   }
+}
+
+/**
+ * 更新任务排序
+ * @param {string[]} taskIds - 按新顺序排列的任务ID数组
+ */
+function reorderTasks(taskIds) {
+  const data = loadData();
+
+  taskIds.forEach((id, index) => {
+    const task = data.tasks.find(t => t.id === id);
+    if (task) {
+      task.order = index;
+    }
+  });
+
+  saveData(data);
 }
 
 /**
@@ -76,13 +112,16 @@ function importFromJSON(file) {
 
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target.result);
+        let data = JSON.parse(e.target.result);
 
         // 验证数据格式
         if (!validateData(data)) {
           reject(new Error('数据格式不正确'));
           return;
         }
+
+        // 数据迁移，确保兼容最新版本
+        data = migrateData(data);
 
         // 保存导入的数据
         saveData(data);

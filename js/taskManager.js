@@ -1,5 +1,8 @@
 // 任务管理模块 - 任务的增删改查和打卡操作
 
+// 拖拽状态
+let draggedTaskId = null;
+
 /**
  * 生成唯一ID
  */
@@ -21,7 +24,8 @@ function addTask(taskName, color = '#2196F3') {
     id: generateId(),
     name: taskName.trim(),
     createdAt: formatDate(new Date()),
-    color: color
+    color: color,
+    order: data.tasks.length // 新任务排在最后
   };
 
   data.tasks.push(newTask);
@@ -158,7 +162,7 @@ function getCheckInCountByDate(date) {
 }
 
 /**
- * 渲染任务列表
+ * 渲染任务列表（按 order 排序）
  */
 function renderTaskList() {
   const data = loadData();
@@ -169,11 +173,14 @@ function renderTaskList() {
   taskListEl.innerHTML = '';
 
   if (data.tasks.length === 0) {
-    taskListEl.innerHTML = '<div class="empty-state">暂无任务,点击"添加任务"开始吧!</div>';
+    taskListEl.innerHTML = '<div class="empty-state">暂无任务,点击“添加任务”开始吧!</div>';
     return;
   }
 
-  data.tasks.forEach(task => {
+  // 按 order 字段排序
+  const sortedTasks = [...data.tasks].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  sortedTasks.forEach(task => {
     const isCheckedIn = isTaskCheckedInToday(task.id);
     const taskCard = createTaskCard(task, isCheckedIn);
     taskListEl.appendChild(taskCard);
@@ -188,11 +195,110 @@ function createTaskCard(task, isCheckedIn) {
   card.className = `task-card ${isCheckedIn ? 'checked-in' : ''}`;
   card.dataset.taskId = task.id;
 
+  // 设置拖拽属性
+  card.draggable = true;
+
+  // 拖拽开始
+  card.addEventListener('dragstart', (e) => {
+    draggedTaskId = task.id;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    // 设置拖拽数据以兼容 Firefox
+    e.dataTransfer.setData('text/plain', task.id);
+  });
+
+  // 拖拽结束
+  card.addEventListener('dragend', () => {
+    card.classList.remove('dragging');
+    // 移除所有卡片的拖拽状态
+    document.querySelectorAll('.task-card').forEach(c => {
+      c.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom');
+    });
+    draggedTaskId = null;
+  });
+
+  // 拖拽经过 - 显示插入位置
+  card.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (draggedTaskId === task.id) return;
+    e.dataTransfer.dropEffect = 'move';
+
+    // 判断拖拽方向，显示上或下的插入指示
+    const rect = card.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+
+    document.querySelectorAll('.task-card').forEach(c => {
+      c.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom');
+    });
+
+    if (e.clientY < midY) {
+      card.classList.add('drag-over', 'drag-over-top');
+    } else {
+      card.classList.add('drag-over', 'drag-over-bottom');
+    }
+  });
+
+  // 拖拽离开
+  card.addEventListener('dragleave', (e) => {
+    // 只有真正离开卡片时才移除样式
+    if (!card.contains(e.relatedTarget)) {
+      card.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom');
+    }
+  });
+
+  // 拖拽放置
+  card.addEventListener('drop', (e) => {
+    e.preventDefault();
+    card.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom');
+
+    if (!draggedTaskId || draggedTaskId === task.id) return;
+
+    // 获取所有任务ID的顺序
+    const taskListEl = document.getElementById('taskList');
+    const allCards = [...taskListEl.querySelectorAll('.task-card')];
+    const taskIds = allCards.map(c => c.dataset.taskId);
+
+    // 找到拖动任务和目标任务的索引
+    const fromIndex = taskIds.indexOf(draggedTaskId);
+    const toIndex = taskIds.indexOf(task.id);
+
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    // 移除拖动的任务ID
+    taskIds.splice(fromIndex, 1);
+
+    // 根据鼠标位置决定插入到目标前还是后
+    // 如果是从上往下拖，插入到目标后面；否则插入到目标前面
+    const newToIndex = taskIds.indexOf(task.id);
+    const rect = card.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+
+    if (e.clientY >= midY) {
+      taskIds.splice(newToIndex + 1, 0, draggedTaskId);
+    } else {
+      taskIds.splice(newToIndex, 0, draggedTaskId);
+    }
+
+    // 保存新排序
+    reorderTasks(taskIds);
+
+    // 重新渲染
+    renderTaskList();
+    showNotification('任务顺序已更新', 'success');
+  });
+
   // 任务颜色标记
   const colorMark = document.createElement('div');
   colorMark.className = 'task-color-mark';
   colorMark.style.backgroundColor = task.color;
   card.appendChild(colorMark);
+
+  // 拖拽手柄图标
+  const dragHandle = document.createElement('div');
+  dragHandle.className = 'drag-handle';
+  dragHandle.innerHTML = '⋮⋮';
+  dragHandle.title = '拖拽调整顺序';
+  card.appendChild(dragHandle);
 
   // 任务信息
   const taskInfo = document.createElement('div');

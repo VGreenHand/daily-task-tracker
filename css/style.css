@@ -169,6 +169,7 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  user-select: none;
 }
 
 .task-card:hover {
@@ -180,6 +181,45 @@ body {
 .task-card.checked-in {
   background-color: #E8F5E9;
   border-color: #4CAF50;
+}
+
+/* 拖拽状态样式 */
+.task-card.dragging {
+  opacity: 0.4;
+  transform: scale(0.95);
+  border-style: dashed;
+}
+
+.task-card.drag-over-top {
+  border-top: 3px solid #2196F3;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.task-card.drag-over-bottom {
+  border-bottom: 3px solid #2196F3;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* 拖拽手柄 */
+.drag-handle {
+  color: #ccc;
+  font-size: 16px;
+  line-height: 1;
+  cursor: grab;
+  padding: 4px 2px;
+  flex-shrink: 0;
+  transition: color 0.3s;
+  letter-spacing: -1px;
+}
+
+.drag-handle:hover {
+  color: #666;
+}
+
+.task-card:active .drag-handle {
+  cursor: grabbing;
 }
 
 .task-color-mark {
